@@ -1,0 +1,210 @@
+---
+title: "Project 2"
+author: "Eva Vincent - SDS 313 UT Austin"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=60))
+income <- read.csv("income.csv")
+crime <- read.csv("crime.csv")
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(kableExtra)
+```
+
+# 1. Introduction:
+
+The two datasets I will be using are pulled from Social Explorer, a website containing datasets about various demographic trends in the United States.
+The site is free to access for UT Austin students.
+My income dataset uses data from Social Explorer's American Community Surveys (ACS) 1 year estimate from 2018 which uses data collected by the U.S.
+Census Bureau.
+The income dataset can be retrieved from [Social Explorer](https://www.socialexplorer.com/tables/ACS2018).
+My crime dataset is pulled from Social Explorer's "U.S. Crime Data (FBI)" dataset which uses data collected by the U.S. Department of Justice through the Uniform Crime Reporting Program.
+The crime dataset can be retrieved from [Social Explorer](https://www.socialexplorer.com/tables/FBI18).
+For this project, I will be investigating the relationship between income levels and crime in various regions.
+I picked this dataset because I thought it would be interesting to see the impact of income on different types of crime.
+
+![Illustration: Maura Losch/Axios](https://images.axios.com/wN2XiTaivX3hA2MOP-gKD6JZHyU=/0x0:1920x1080/1920x1080/2023/10/18/1697661715861.jpg)
+
+# 2. Data Preparation:
+
+```{r, include=FALSE}
+#Remove unnecessary variable names
+income <- income[-1,]
+crime <- crime[-1,]
+
+# Convert crime character variables to numeric
+crime$Total.Violent.and.Property.Crimes <- as.numeric(crime$Total.Violent.and.Property.Crimes)
+crime$Total.Violent.Crimes. <- as.numeric(crime$Total.Violent.Crimes.)
+crime$Total.Property.Crimes <- as.numeric(crime$Total.Property.Crimes)
+
+# Merge datasets
+sum(table(crime$FIPS) > 1)
+sum(table(income$FIPS) > 1)
+income_crime_full <- inner_join(income, crime, by="FIPS")
+
+# Only variables of interest
+all.income_crime <- select(income_crime_full, FIPS, Name.of.Area.x, State.U.S..Abbreviation..USPS., Total.Population, Population.Density..Per.Sq..Mile., Area..Land., Households., Households..Less.than..10.000, Households...10.000.to..14.999, Households...15.000.to..19.999, Households...20.000.to..24.999, Households...25.000.to..29.999, Households...30.000.to..34.999, Households...35.000.to..39.999,Households...40.000.to..44.999,Households...45.000.to..49.999,Households...50.000.to..59.999,Households...60.000.to..74.999,Households...75.000.to..99.999,Households...100.000.to..124.999, Households...125.000.to..149.999, Households...150.000.to..199.999, Households...200.000.or.More, Median.Household.Income..In.2018.Inflation.Adjusted.Dollars., Average.Household.Income..In.2018.Inflation.Adjusted.Dollars., Total.Violent.and.Property.Crimes, Total.Violent.Crimes., Total.Property.Crimes)
+
+# Convert income character variables to numeric
+numeric_variable <- function(column) {
+  column <- column[!is.na(column) | column != " "]
+  all(grepl("^[0-9]+$", column))
+}
+
+for (col in names(all.income_crime)) {
+  if (is.character(all.income_crime[[col]])) {
+    if (numeric_variable(all.income_crime[[col]])) {
+      all.income_crime[[col]] <- as.numeric(all.income_crime[[col]])
+    }
+  }
+}
+
+# Merge Income Variables
+income.levels_crime <- mutate(all.income_crime, 
+                              lower_class_households= Households..Less.than..10.000 + Households...10.000.to..14.999 + Households...15.000.to..19.999 + Households...20.000.to..24.999 + Households...25.000.to..29.999 + Households...30.000.to..34.999 + Households...35.000.to..39.999 + Households...40.000.to..44.999 + Households...45.000.to..49.999 + Households...50.000.to..59.999, 
+                              middle_class_households= Households...60.000.to..74.999 + Households...75.000.to..99.999 + Households...100.000.to..124.999 + Households...125.000.to..149.999, 
+                              upper_class_households= Households...150.000.to..199.999 + Households...200.000.or.More)
+
+# Cleaned dataset
+income_crime <- select(income.levels_crime, FIPS, Name.of.Area.x, State.U.S..Abbreviation..USPS., Total.Population, Population.Density..Per.Sq..Mile., Area..Land., Households., lower_class_households, middle_class_households, upper_class_households, Total.Violent.and.Property.Crimes, Total.Violent.Crimes., Total.Property.Crimes)
+```
+
+I obtained the crime dataset by creating a report with data from the FBI Crime Dataset from 2018.
+The variables I pulled were total population, total violent and property crimes reported, violent crimes reported, and property crimes reported.
+I obtained the income dataset from Social Explorer's ACS 1 Year Estimate from 2018.
+I selected total population, population density, household income, median household income, and average household income.
+I then imported these two datasets into R.
+To process my data, I first removed a row with the numeric codes for the variable names to make my dataset more concise.
+I then changed my desired crime variables from character to numeric variables.
+I then merged the two datasets using an inner join.
+I created a new dataframe with only the variables I wanted to investigate.
+One major challenge I faced when preparing the data was that all the numeric values were showing up as character variables in my income dataframe.
+I originally planned to individually convert each income variable from character to numeric, but I instead came to the conclusion that creating a loop would be more efficient.
+Once the character variables were converted to numeric, I could mutate the income variables and combine the 16 different income ranges into three income ranges: lower, middle, and upper class.
+Finally, I created my final dataset with my desired variables and only the three income ranges.
+
+# 3. Variable Descriptions:
+
+Create a subset of your “cleaned dataset” (final version after all merging, variable creation, renaming, formatting, etc.) that only includes the variables of interest.
+Make a nicely formatted table that includes the name of each variable, its type, and a brief description.
+
+```{r}
+variables <- data.frame(
+  Variable = c("FIPS", "Name.of.Area.x", "State.U.S..Abbreviation..USPS.",     "Total.Population", "Population.Density..Per.Sq..Mile.", "Area..Land.", "Households.", "lower_class_households", "middle_class_households", "upper_class_households", "Total.Violent.and.Property.Crimes", "Total.Violent.Crimes.", "Total.Property.Crimes"), 
+  Type = c("double", "character", "character","double", "double", "double", "double", "double", "double", "double", "double", "double", "double"), 
+  Description = c("County Federal Information Processing Standards Codes", "Name of County", "U.S. State Abbreviation", "Total population of county", "Population density (per sq. mile)", "Land Area (sq. mile)", "Total Number of Households", "Number of Households with Income less than $60,000", "Number of Households with Income $60,000 to $149,000", "Number of Households with Income more than $150,000", "Total Violent and Property Crimes", "Total Violent Crimes.", "Total Property Crimes"))
+
+kable_classic(kbl(variables,caption = "Variable Descriptions"),full_width = FALSE)
+```
+
+# 4. Univariate Analyses:
+
+## Distribution of the States
+
+```{r}
+# Convert state names to upper case
+income_crime$State.U.S..Abbreviation..USPS. <- str_to_upper(income_crime$State.U.S..Abbreviation..USPS.)
+
+# Create graph
+income.crime_ggplot <- ggplot(income_crime)
+income.crime_ggplot + geom_bar(aes(x=State.U.S..Abbreviation..USPS.)) + theme_classic() + labs(title='States', x='State Abbreviations', y='Frequency')
+
+# Frequency table
+mytable <- data.frame(table(income_crime$State.U.S..Abbreviation..USPS.))
+colnames(mytable) <- c('State','Frequency')
+kable_classic(kbl(mytable,caption = "Frequency of States"),full_width = FALSE)
+```
+
+Above is the distribution of the number of regions from each state included in the dataset displayed as a barplot.
+The frequency table describes the distribution. Texas has the highest number of regions at 54 regions while D.C. and Vermont have the lowest at only 1 region. This makes sense in the context of how large these areas are.
+
+## Distribution of Lower Class Households
+
+```{r}
+income.crime_ggplot + geom_histogram(aes(x=lower_class_households), bins= 20, col='black',fill='dark red') + theme_classic() + labs(title='Lower Class Households', x='Number of Lower Class Housholds', y='Frequency') + xlim(c(0,100000))
+```
+
+Above is the distribution of the number of lower class households in each region displayed as a histogram.
+Only frequencies under 100,000 are included to account for extreme outliers and the graph is positively skewed.
+The median number of lower class households is `r round(median(income_crime$lower_class_households, na.rm=TRUE),2)` and the interquartile range is `r round(IQR(income_crime$lower_class_households, na.rm=TRUE),2)`.
+
+## Distribution of Middle Class Households
+
+```{r}
+income.crime_ggplot + geom_histogram(aes(x=middle_class_households), bins= 20, col='black',fill='dark green') + theme_classic() + labs(title='Middle Class Households', x='Number of Lower Class Housholds', y='Frequency') + xlim(c(0,100000))
+```
+
+Above is the distribution of the number of middle class households in each region displayed as a histogram.
+Only frequencies under 100,000 are included to account for extreme outliers and the graph is positively skewed.
+The median number of middle class households is `r round(median(income_crime$middle_class_households, na.rm=TRUE),2)` and the interquartile range is `r round(IQR(income_crime$middle_class_households, na.rm=TRUE),2)`.
+
+## Distribution of Upper Class Households
+
+```{r}
+income.crime_ggplot + geom_histogram(aes(x=upper_class_households), bins= 20,col='black',fill='dark blue') + theme_classic() + labs(title='Upper Class Households', x='Number of Upper Class Housholds', y='Frequency') + xlim(c(0,100000))
+```
+
+Above is the distribution of the number of upper class households in each region displayed as a histogram.
+Only frequencies under 100,000 are included to account for extreme outliers and the graph is positively skewed.
+The median number of upper class households is `r round(median(income_crime$upper_class_households, na.rm=TRUE),2)` and the interquartile range is `r round(IQR(income_crime$upper_class_households, na.rm=TRUE),2)`.
+
+# 5. Multivariate Analyses:
+## Lower Class and Property Crime
+
+```{r}
+income.crime_ggplot + geom_point(aes(x=lower_class_households,y=Total.Property.Crimes)) + labs(title='Lower Class Households vs. Property Crime', x='Number of Lower Class Households',y='Number of Property Crimes')+ xlim(c(0,100000))+ ylim(c(0,15000))+theme_classic()
+```
+
+The above graph shows the relationship between regions with under 100,000 lower class households and their total number of property crimes. The correlation coefficient is `r round(cor(income_crime$lower_class_households,income_crime$Total.Property.Crimes, use = "complete.obs"),2)`. The graph and correlation coefficient suggest a <span style="color: red;">weak</span> correlation between the number of low income households and the total number of property crimes.
+
+## Upper Class and Property Crime
+
+```{r}
+income.crime_ggplot + geom_point(aes(x=upper_class_households,y=Total.Property.Crimes)) + labs(title='Upper Class Housholds vs. Property Crime', x='Number of Upper Class Households',y='Number of Property Crimes')+ xlim(c(0,100000))+ ylim(c(0,35000))+theme_classic()
+```
+
+The above graph shows the relationship between regions with under 100,000 upper class households and their total number of property crimes. The correlation coefficient is `r round(cor(income_crime$upper_class_households,income_crime$Total.Property.Crimes, use = "complete.obs"),2)`. The graph and correlation coefficient suggest an <span style="color: red;">extremely weak</span> correlation between the number of high income households and the total number of property crimes.
+
+## Lower Class and Violent Crime
+
+```{r}
+income.crime_ggplot + geom_point(aes(x=lower_class_households,y=Total.Violent.Crimes.)) + labs(title='Lower Class Housholds vs. Violent Crime', x='Number of Lower Class Households',y='Number of Violent Crimes')+ xlim(c(0,100000)) + ylim(c(0,4000)) + theme_classic()
+```
+
+The above graph shows the relationship between regions with under 100,000 lower class households and their total number of violent crimes. The correlation coefficient is `r round(cor(income_crime$lower_class_households,income_crime$Total.Violent.Crimes., use = "complete.obs"),2)`. The graph and correlation coefficient suggest a <span style="color: red;">somewhat strong positive</span> correlation between the number of low income households and the total number of violent crimes.
+
+## Upper Class and Violent Crime
+
+```{r}
+income.crime_ggplot + geom_point(aes(x=upper_class_households,y=Total.Violent.Crimes.)) + labs(title='Upper Class Housholds vs. Violent Crime', x='Number of Upper Class Households',y='Number of Violent Crimes') + xlim(c(0,100000))+ theme_classic()
+```
+
+The above graph shows the relationship between regions with under 100,000 upper class households and their total number of violent crimes. The correlation coefficient is `r round(cor(income_crime$upper_class_households,income_crime$Total.Violent.Crimes., use = "complete.obs"),2)`. The graph and correlation coefficient suggest a <span style="color: red;">weak</span> correlation between the number of high income households and the total number of violent crimes.
+
+# 6. Reproducibility Resources:
+
+All files needed to reproduce this report can be found in this [GitHub repository](https://github.com/eva-vincent/Project-2). The repository contains the unprocessed crime and income datasets as well as the R Markdown file containing all the code used to create this report. My html file is also included for comparison.
+
+# 7. Choice Elements: 
+
+I used in-line code to describe my histograms in my univariate analyses and all 4 of my scatterplots in my bivariate analyses. In my data preparation, I merged the income dataset and the crime dataset to get the final dataset used throughout my report. I created three new variables of interest by merging the income variables: lower, middle, and upper class income households. I fixed the formatting on my income variables and my crime variables by changing them from character to numeric variables. I used a loop to achieve this, changing 16 character variables to numeric variables. Within this loop, I used an if statement to ensure that the column had numeric values before converting it to a numeric variable.
+
+# 8. Conclusion:
+
+The results of my analyses support the conclusion that there was no significantly strong relationship between income levels and crime. Although there was somewhat of a positive relationship between violent crime and low income households with a correlation coefficient of 0.51, this is still too low of a number to establish a strong correlation. I didn't expect there to be a large difference between property crimes and violent crimes for each class, but I did expect some difference between the classes. However, this was not the case, and, based on the correlation coefficients, the relationships between crime and income were almost the same across all my variables of interest.
+
+# 9. References:
+
+Mendoza, Madalyn. “Property Crime in San Antonio Rises, as Violent Crimes Drop, Mirroring National Trend.” Axios San Antonio, 19 Oct. 2023, www.axios.com/local/san-antonio/2023/10/19/crime-rate-data-statistics-property-crimes-san-antonio.
+
+“Tables - Social Explorer.” Social Explorer, www.socialexplorer.com/explore-tables. 
